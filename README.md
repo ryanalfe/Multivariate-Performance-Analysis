@@ -1,44 +1,53 @@
-# Multivariate Analysis of International Track Performance
+# Applied Multivariate Statistical Analysis in R
 
-## Overview
+This project applies multivariate statistical methods to psychological,
+sales-performance, and international athletic datasets using R.
 
-This project analyzes international women's running records across seven events using multivariate statistical methods in R.
+The analyses demonstrate how dimensionality reduction and latent-variable
+methods can simplify complex datasets, identify underlying relationships,
+compare alternative statistical models, and reveal unusual observations.
 
-The analysis explores whether performance across several race distances can be represented using a smaller number of underlying dimensions.
+## Analyses
+
+### 1. Psychological Profile Analysis
+Principal component analysis (PCA) is used to reduce five psychological
+measurements into a smaller number of dimensions while preserving most
+of the variation in the original data.
+
+### 2. Sales Performance and Aptitude
+Two- and three-factor models are compared to identify latent dimensions
+underlying measures of salesperson performance and aptitude.
+
+### 3. International Track Performance
+Factor structures across seven running events are compared using raw
+race times and transformed speeds to demonstrate how scaling and data
+representation affect multivariate statistical results.
 
 ## Methods
 
-The project uses:
-
 - Principal Component Analysis (PCA)
 - Factor Analysis
-- Varimax rotation
-- Covariance and correlation matrices
-- Factor scores
-- Multivariate outlier detection
-- Data visualization
-
-## Key Findings
-
-The analysis identified two broad dimensions of athletic performance:
-
-- Short-distance / sprint performance
-- Longer-distance performance
-
-Using standardized variables produced a clearer factor structure across events measured on different scales.
-
-Potential multivariate outliers were also identified using factor scores.
+- Varimax Rotation
+- Covariance and Correlation Matrices
+- Factor Scores
+- Model Goodness-of-Fit Testing
+- Multivariate Visualization
+- Exploratory Outlier Identification
 
 ## Technologies
 
 - R
 - R Markdown
-- ggplot2
-- Base R statistical functions
+- `psych`
+- Statistical visualization
 
-## Files
+## Full Analysis
 
-- `analysis.Rmd` — complete reproducible analysis
-- `analysis.html` — rendered report
-- `data/` — source datasets
-- `figures/` — exported visualizations
+See [`multivariate_analysis.md`](multivariate_analysis.md) for the complete
+analysis, code, results, visualizations, and interpretations.
+
+## Author
+
+Ryan Alfe  
+Statistics & Economics  
+University of Florida
