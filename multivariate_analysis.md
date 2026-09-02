@@ -1,0 +1,1019 @@
+Multivariate Performance Analysis
+================
+Ryan Alfe
+2026-04-17
+
+Reading data
+
+``` r
+# Psychological profile data (Table 4.6): 5 profile variables + socioeconomic
+# level + gender
+library(psych)
+dat46 <- read.table("T4-6.DAT", header = FALSE, strip.white = TRUE)
+
+# Salespeople data (Table 9.12): 7 variables on 50 salespeople
+dat912 <- read.table("T9-12.DAT", header = FALSE, strip.white = TRUE)
+
+# Women's track records (Table 1.9): country name + 7 event columns
+dat19_raw <- readLines("T1-9.dat")
+dat19 <- do.call(rbind, lapply(dat19_raw, function(line) {
+  tokens <- strsplit(trimws(line), "\\s+")[[1]]
+  country <- paste(head(tokens, length(tokens) - 7), collapse = " ")
+  c(list(country), as.list(as.numeric(tail(tokens, 7))))
+}))
+dat19 <- as.data.frame(dat19, stringsAsFactors = FALSE)
+dat19[, 2:8] <- lapply(dat19[, 2:8], as.numeric)
+```
+
+------------------------------------------------------------------------
+
+## Dimensionality Reduction of Psychological Profiles - Can five related psychological measurements be reduced to a smaller set of dimensions without losing most of the information in the original data?
+
+Objective:
+
+This analysis examines whether five psychological profile measurements
+can be summarized using a smaller number of underlying dimensions.
+Principal component analysis (PCA) is used to reduce the complexity of
+the dataset while preserving as much of the original variation as
+possible.
+
+The analysis also compares results based on covariance and correlation
+matrices, visualizes individuals in a lower-dimensional space, and
+investigates whether demographic groups or unusual observations can be
+identified.
+
+------------------------------------------------------------------------
+
+``` r
+profile <- dat46[, 1:5]
+names(profile) <- c("Indep", "Supp", "Benev", "Conform", "Leader")
+
+socio <- factor(dat46[, 6])
+gender <- factor(dat46[, 7])
+
+Rmat <- cor(profile)
+Smat <- cov(profile)
+
+eigR <- eigen(Rmat)
+eigS <- eigen(Smat)
+
+propR <- eigR$values / sum(eigR$values)
+cumR <- cumsum(propR)
+
+propS <- eigS$values / sum(eigS$values)
+cumS <- cumsum(propS)
+
+R_summary <- data.frame(
+  Component = paste0("PC", 1:5),
+  Eigenvalue = eigR$values,
+  Proportion = propR,
+  Cumulative = cumR
+)
+
+S_summary <- data.frame(
+  Component = paste0("PC", 1:5),
+  Eigenvalue = eigS$values,
+  Proportion = propS,
+  Cumulative = cumS
+)
+
+R_summary[, -1] <- round(R_summary[, -1], 3)
+S_summary[, -1] <- round(S_summary[, -1], 3)
+
+R_evecs <- round(eigR$vectors, 3)
+S_evecs <- round(eigS$vectors, 3)
+
+rownames(R_evecs) <- names(profile)
+colnames(R_evecs) <- paste0("PC", 1:5)
+
+rownames(S_evecs) <- names(profile)
+colnames(S_evecs) <- paste0("PC", 1:5)
+```
+
+### Constructing a scree plot to determine the appropriate number of components that effectively summarize variability
+
+``` r
+par(mfrow = c(1, 2))
+
+plot(1:5, eigR$values, type = "b", pch = 19,
+     xlab = "Component Number", ylab = "Eigenvalue",
+     main = "Scree Plot for R")
+abline(h = 1, lty = 2)
+
+plot(1:5, eigS$values, type = "b", pch = 19,
+     xlab = "Component Number", ylab = "Eigenvalue",
+     main = "Scree Plot for S")
+```
+
+![](multivariate_analysis_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+
+``` r
+par(mfrow = c(1, 1))
+```
+
+Based on the scree plots and the cumulative proportions of variance
+explained, I would retain **4 principal components** for both analyses.
+The first four components explain about **98.2%** of the variability for
+$\mathbf{R}$ and about **98.3%** of the variability for $\mathbf{S}$, so
+the fifth component contributes very little.
+
+### Interpreting the sample principal components
+
+The loading matrices show that both analyses lead to very similar
+component interpretations.
+
+PC1 contrasts independence and leadership with benevolence and
+conformity. PC2 contrasts support with conformity and leadership The
+remaining retained components are also mainly contrast components. So,
+it makes very little difference whether the principal components are
+obtained from the correlation matrix $\mathbf{R}$ or the covariance
+matrix $\mathbf{S}$.
+
+Testing for outliers and whether we can distinguish groups representing
+the two socioeconomic levels and/or the two genders:
+
+Using the values for the first two principal components, I will plot the
+data in a two-dimensional space with $\hat{y}_1$ along the vertical axis
+and $\hat{y}_2$ along the horizontal axis.
+
+``` r
+scores_R <- scale(profile, center = TRUE, scale = TRUE) %*% eigR$vectors
+scores_S <- scale(profile, center = TRUE, scale = FALSE) %*% eigS$vectors
+
+dist_R <- sqrt(scores_R[, 1]^2 + scores_R[, 2]^2)
+dist_S <- sqrt(scores_S[, 1]^2 + scores_S[, 2]^2)
+
+out_R <- order(dist_R, decreasing = TRUE)[1]
+out_S <- order(dist_S, decreasing = TRUE)[1:2]
+
+pch_socio <- ifelse(socio == levels(socio)[1], 1, 16)
+pch_gender <- ifelse(gender == levels(gender)[1], 1, 16)
+
+par(mfrow = c(2, 2))
+
+plot(scores_R[, 2], scores_R[, 1],
+     pch = pch_socio,
+     xlab = expression(hat(y)[2]),
+     ylab = expression(hat(y)[1]),
+     main = "Correlation PCA: Socioeconomic Level")
+legend("topright", legend = levels(socio), pch = c(1, 16), title = "Socio")
+text(scores_R[out_R, 2], scores_R[out_R, 1],
+     labels = out_R, pos = 4, cex = 0.8)
+
+plot(scores_R[, 2], scores_R[, 1],
+     pch = pch_gender,
+     xlab = expression(hat(y)[2]),
+     ylab = expression(hat(y)[1]),
+     main = "Correlation PCA: Gender")
+legend("topright", legend = levels(gender), pch = c(1, 16), title = "Gender")
+text(scores_R[out_R, 2], scores_R[out_R, 1],
+     labels = out_R, pos = 4, cex = 0.8)
+
+plot(scores_S[, 2], scores_S[, 1],
+     pch = pch_socio,
+     xlab = expression(hat(y)[2]),
+     ylab = expression(hat(y)[1]),
+     main = "Covariance PCA: Socioeconomic Level")
+legend("topright", legend = levels(socio), pch = c(1, 16), title = "Socio")
+text(scores_S[out_S, 2], scores_S[out_S, 1],
+     labels = out_S, pos = 4, cex = 0.8)
+
+plot(scores_S[, 2], scores_S[, 1],
+     pch = pch_gender,
+     xlab = expression(hat(y)[2]),
+     ylab = expression(hat(y)[1]),
+     main = "Covariance PCA: Gender")
+legend("topright", legend = levels(gender), pch = c(1, 16), title = "Gender")
+text(scores_S[out_S, 2], scores_S[out_S, 1],
+     labels = out_S, pos = 4, cex = 0.8)
+```
+
+![](multivariate_analysis_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+``` r
+par(mfrow = c(1, 1))
+```
+
+The two-dimensional plots do not show clear separation between the two
+socioeconomic groups, and they also do not show clear separation between
+the two genders. For possible outliers, observation 111 stands out in
+the correlation-matrix analysis, while observations 111 and 104 stand
+out in the covariance-matrix analysis.
+
+Constructing a 95% confidence interval for $\lambda_1$, the variance of
+the first population principal component from the covariance matrix:
+
+``` r
+n <- nrow(profile)
+lambda1_hat <- eigS$values[1]
+zcrit <- qnorm(0.975)
+
+lower <- lambda1_hat / (1 + zcrit * sqrt(2 / n))
+upper <- lambda1_hat / (1 - zcrit * sqrt(2 / n))
+
+lambda1_hat
+```
+
+    ## [1] 68.75238
+
+``` r
+round(c(lower, upper), 2)
+```
+
+    ## [1] 55.31 90.83
+
+Therefore, the large-sample 95% confidence interval for $\lambda_1$ is
+approximately **(55.31, 90.83)**.
+
+------------------------------------------------------------------------
+
+## Identifying Latent Drivers of Sales Performance - Can multiple measures of salesperson performance and aptitude be summarized into a smaller set of underlying characteristics that are easier to interpret?
+
+Objective:
+
+This analysis investigates whether seven measures of salesperson
+performance and aptitude can be explained by a smaller number of
+underlying characteristics. The dataset includes measures of sales
+growth, profitability, new-account performance, creativity, mechanical
+reasoning, abstract reasoning, and mathematical ability.
+
+Factor analysis is used to identify latent patterns among these
+variables. Competing two-factor and three-factor models are compared
+based on statistical fit and interpretability, and the selected model is
+then used to estimate factor scores for a new salesperson.
+
+------------------------------------------------------------------------
+
+``` r
+library(stats)
+
+sales <- as.data.frame(dat912)
+names(sales) <- c("Growth", "Profits", "Newaccts", "Creative",
+                  "Mechanic", "Abstract", "Math")
+
+R_sales <- cor(sales)
+n_sales <- nrow(sales)
+
+## Maximum likelihood factor models
+fa2_ml <- factanal(sales, factors = 2, rotation = "none")
+fa2_rot <- factanal(sales, factors = 2, rotation = "varimax")
+
+fa3_ml <- factanal(sales, factors = 3, rotation = "none")
+fa3_rot <- factanal(sales, factors = 3, rotation = "varimax")
+
+## Unrotated loadings
+load2_unrot <- as.data.frame(round(unclass(fa2_ml$loadings), 3))
+load3_unrot <- as.data.frame(round(unclass(fa3_ml$loadings), 3))
+
+## Rotated loadings
+load2_rot <- as.data.frame(round(unclass(fa2_rot$loadings), 3))
+load3_rot <- as.data.frame(round(unclass(fa3_rot$loadings), 3))
+```
+
+### Estimating Candidate Factor Models
+
+To identify a lower-dimensional representation of the seven standardized
+variables, maximum-likelihood factor models were estimated using both
+two-factor and three-factor specifications. The unrotated factor
+loadings provide an initial view of how each observed variable relates
+to the underlying latent dimensions.
+
+``` r
+load2_unrot
+```
+
+    ##          Factor1 Factor2
+    ## Growth     0.695   0.669
+    ## Profits    0.669   0.695
+    ## Newaccts   0.795   0.494
+    ## Creative   0.983  -0.167
+    ## Mechanic   0.655   0.312
+    ## Abstract   0.250   0.569
+    ## Math       0.558   0.812
+
+``` r
+load3_unrot
+```
+
+    ##          Factor1 Factor2 Factor3
+    ## Growth     0.901   0.381  -0.066
+    ## Profits    0.775   0.600   0.067
+    ## Newaccts   0.931   0.202   0.060
+    ## Creative   0.733  -0.118   0.666
+    ## Mechanic   0.689   0.225   0.169
+    ## Abstract   0.757  -0.132  -0.636
+    ## Math       0.762   0.608  -0.110
+
+### Rotation and Interpretation of the Factor Structure
+
+Varimax rotation was applied to both candidate models to produce a
+clearer and more interpretable factor structure. The rotated loadings
+were then compared to evaluate which specification more effectively
+separates the observed performance and aptitude measures into distinct
+latent dimensions.
+
+``` r
+load2_rot
+```
+
+    ##          Factor1 Factor2
+    ## Growth     0.852   0.452
+    ## Profits    0.868   0.419
+    ## Newaccts   0.717   0.602
+    ## Creative   0.148   0.987
+    ## Mechanic   0.501   0.525
+    ## Abstract   0.619   0.060
+    ## Math       0.946   0.277
+
+``` r
+load3_rot
+```
+
+    ##          Factor1 Factor2 Factor3
+    ## Growth     0.793   0.374   0.438
+    ## Profits    0.911   0.317   0.185
+    ## Newaccts   0.651   0.544   0.438
+    ## Creative   0.255   0.964   0.020
+    ## Mechanic   0.542   0.465   0.207
+    ## Abstract   0.299   0.054   0.950
+    ## Math       0.917   0.180   0.298
+
+The rotated three-factor solution provides a clearer structure than the
+two-factor alternative. In the three-factor model, the first factor is
+strongly associated with sales growth, profitability, and mathematical
+ability. The second factor is primarily associated with creativity and
+new-account performance, while the third factor is driven largely by
+abstract reasoning.
+
+The two-factor model combines several of these relationships into
+broader dimensions, making the resulting structure less distinct. Based
+on interpretability, the three-factor solution provides the clearer
+representation of the salesperson data.
+
+Comparing Variance Representation Across Models:
+
+To further compare the two candidate models, communalities and specific
+variances were calculated for each observed variable. The reconstructed
+correlation matrices were also examined to evaluate how effectively each
+factor model represents the relationships present in the original data.
+
+``` r
+load2_rot_mat <- unclass(fa2_rot$loadings)
+load3_rot_mat <- unclass(fa3_rot$loadings)
+
+comm2 <- rowSums(load2_rot_mat^2)
+uniq2 <- fa2_rot$uniquenesses
+Sigma2_hat <- load2_rot_mat %*% t(load2_rot_mat) + diag(uniq2)
+
+comm3 <- rowSums(load3_rot_mat^2)
+uniq3 <- fa3_rot$uniquenesses
+Sigma3_hat <- load3_rot_mat %*% t(load3_rot_mat) + diag(uniq3)
+
+comm_table_2 <- data.frame(
+  Variable = names(sales),
+  Communality = round(comm2, 4),
+  Specific_Variance = round(uniq2, 4)
+)
+
+comm_table_3 <- data.frame(
+  Variable = names(sales),
+  Communality = round(comm3, 4),
+  Specific_Variance = round(uniq3, 4)
+)
+
+Sigma2_hat <- round(Sigma2_hat, 3)
+Sigma3_hat <- round(Sigma3_hat, 3)
+
+rownames(Sigma2_hat) <- names(sales)
+colnames(Sigma2_hat) <- names(sales)
+
+rownames(Sigma3_hat) <- names(sales)
+colnames(Sigma3_hat) <- names(sales)
+
+comm_table_2
+```
+
+    ##          Variable Communality Specific_Variance
+    ## Growth     Growth      0.9308            0.0692
+    ## Profits   Profits      0.9296            0.0704
+    ## Newaccts Newaccts      0.8767            0.1233
+    ## Creative Creative      0.9950            0.0050
+    ## Mechanic Mechanic      0.5264            0.4736
+    ## Abstract Abstract      0.3864            0.6136
+    ## Math         Math      0.9712            0.0288
+
+``` r
+comm_table_3
+```
+
+    ##          Variable Communality Specific_Variance
+    ## Growth     Growth      0.9614            0.0386
+    ## Profits   Profits      0.9655            0.0345
+    ## Newaccts Newaccts      0.9119            0.0881
+    ## Creative Creative      0.9950            0.0050
+    ## Mechanic Mechanic      0.5534            0.4466
+    ## Abstract Abstract      0.9950            0.0050
+    ## Math         Math      0.9625            0.0375
+
+``` r
+Sigma2_hat
+```
+
+    ##          Growth Profits Newaccts Creative Mechanic Abstract  Math
+    ## Growth    1.000   0.930    0.883    0.572    0.664    0.554 0.931
+    ## Profits   0.930   1.000    0.875    0.541    0.655    0.562 0.937
+    ## Newaccts  0.883   0.875    1.000    0.700    0.675    0.480 0.845
+    ## Creative  0.572   0.541    0.700    1.000    0.592    0.150 0.413
+    ## Mechanic  0.664   0.655    0.675    0.592    1.000    0.341 0.619
+    ## Abstract  0.554   0.562    0.480    0.150    0.341    1.000 0.602
+    ## Math      0.931   0.937    0.845    0.413    0.619    0.602 1.000
+
+``` r
+Sigma3_hat
+```
+
+    ##          Growth Profits Newaccts Creative Mechanic Abstract  Math
+    ## Growth    1.000   0.923    0.912    0.571    0.695    0.674 0.926
+    ## Profits   0.923   1.000    0.847    0.542    0.680    0.465 0.948
+    ## Newaccts  0.912   0.847    1.000    0.699    0.697    0.640 0.826
+    ## Creative  0.571   0.542    0.699    1.000    0.591    0.147 0.413
+    ## Mechanic  0.695   0.680    0.697    0.591    1.000    0.384 0.643
+    ## Abstract  0.674   0.465    0.640    0.147    0.384    1.000 0.567
+    ## Math      0.926   0.948    0.826    0.413    0.643    0.567 1.000
+
+The three-factor solution generally produces communalities that are
+equal to or larger than those from the two-factor model, indicating that
+it explains a greater proportion of the variance in several observed
+variables.
+
+The improvement is particularly noticeable for abstract reasoning, which
+is represented very strongly by the third factor. Combined with the
+clearer rotated factor structure, these results provide additional
+support for the three-factor specification.
+
+### Evaluating Model Fit
+
+Chi-square goodness-of-fit tests were used to evaluate whether the
+two-factor and three-factor models adequately reproduce the observed
+correlation structure. The models were evaluated at the 1% significance
+level and compared alongside their factor loadings, communalities, and
+interpretability.
+
+For each model, the hypotheses are
+
+$$H_0: \boldsymbol{\Sigma} = \mathbf{L}\mathbf{L}^{\top} + \boldsymbol{\Psi}$$
+
+versus
+
+$$H_1: \boldsymbol{\Sigma} \neq \mathbf{L}\mathbf{L}^{\top} + \boldsymbol{\Psi}$$
+
+``` r
+fa2_test <- factanal(sales, factors = 2, rotation = "none")
+fa3_test <- factanal(sales, factors = 3, rotation = "none")
+
+test_results <- data.frame(
+  m = c(2, 3),
+  Chi_Square = c(unname(fa2_test$STATISTIC), unname(fa3_test$STATISTIC)),
+  df = c(unname(fa2_test$dof), unname(fa3_test$dof))
+)
+
+test_results$Critical_Value <- qchisq(0.99, df = test_results$df)
+test_results$p_value <- 1 - pchisq(test_results$Chi_Square, df = test_results$df)
+
+test_results$Decision <- ifelse(
+  test_results$Chi_Square > test_results$Critical_Value,
+  "Reject H0",
+  "Fail to reject H0"
+)
+
+test_results_out <- test_results
+test_results_out[, 1:5] <- round(test_results_out[, 1:5], 4)
+test_results_out
+```
+
+    ##   m Chi_Square df Critical_Value p_value  Decision
+    ## 1 2   117.2006  8        20.0902       0 Reject H0
+    ## 2 3    62.1804  3        11.3449       0 Reject H0
+
+At the 1% significance level, the chi-square goodness-of-fit test
+rejects both candidate models, indicating that neither provides an exact
+representation of the observed correlation structure.
+
+However, the three-factor model provides the stronger practical
+approximation. It produces a substantially smaller chi-square statistic,
+stronger communalities for several variables, and a more clearly
+interpretable rotated factor structure. For these reasons, the
+three-factor model is selected for the subsequent scoring analysis.
+
+Applying the Selected Model to a New Salesperson:
+
+The selected three-factor model was applied to a new salesperson to
+illustrate how the latent factor structure can be used to summarize an
+individual’s performance and aptitude profile.
+
+The salesperson’s seven observed measurements were first standardized
+using the sample means and standard deviations from the original
+dataset. Factor scores were then estimated using both the regression and
+weighted least-squares methods.
+
+The observed profile for the new salesperson is
+
+$$\mathbf{x}^{\top} = [110,\;98,\;105,\;15,\;18,\;12,\;35]$$
+
+``` r
+new_x <- c(Growth = 110, Profits = 98, Newaccts = 105,
+           Creative = 15, Mechanic = 18, Abstract = 12, Math = 35)
+
+z_new <- (new_x - colMeans(sales)) / apply(sales, 2, sd)
+
+## Use the chosen m = 3 rotated maximum likelihood solution
+L_ml3 <- unclass(fa3_rot$loadings)
+psi_ml3 <- diag(fa3_rot$uniquenesses)
+Sigma_ml3 <- L_ml3 %*% t(L_ml3) + psi_ml3
+
+score_ml_reg <- t(L_ml3) %*% solve(Sigma_ml3, z_new)
+
+score_ml_wls <- solve(t(L_ml3) %*% solve(psi_ml3) %*% L_ml3) %*%
+  t(L_ml3) %*% solve(psi_ml3, z_new)
+
+score_table <- data.frame(
+  Method = c("Maximum likelihood: regression",
+             "Maximum likelihood: weighted least squares"),
+  Factor1 = c(score_ml_reg[1], score_ml_wls[1]),
+  Factor2 = c(score_ml_reg[2], score_ml_wls[2]),
+  Factor3 = c(score_ml_reg[3], score_ml_wls[3])
+)
+
+score_table[, -1] <- round(score_table[, -1], 3)
+
+round(z_new, 3)
+```
+
+    ##   Growth  Profits Newaccts Creative Mechanic Abstract     Math 
+    ##    1.522   -0.852    0.465    0.957    1.129    0.673    0.497
+
+``` r
+score_table
+```
+
+    ##                                       Method Factor1 Factor2 Factor3
+    ## 1             Maximum likelihood: regression  -0.329   1.063   0.793
+    ## 2 Maximum likelihood: weighted least squares  -0.353   1.077   0.806
+
+After standardization, the salesperson’s profile is
+
+$$\mathbf{z}^{*} = [1.522,\;-0.852,\;0.465,\;0.957,\;1.129,\;0.673,\;0.497]$$
+
+The regression and weighted least-squares methods produce similar scores
+across all three latent factors. The consistency between the two scoring
+approaches suggests that the salesperson’s estimated position within the
+three-factor structure is relatively stable across estimation methods.
+
+------------------------------------------------------------------------
+
+## Latent Structure in International Track Performance - Can performance across several running events be explained by a smaller number of underlying performance dimensions, and does the way performance is measured affect those conclusions?
+
+Objective:
+
+This analysis examines patterns in women’s national track records across
+events ranging from the 100-meter sprint to the marathon. The goal is to
+determine whether performance across seven race distances can be
+summarized by a smaller number of underlying athletic performance
+dimensions.
+
+Factor analysis is performed using both covariance and correlation
+matrices. The analysis also compares race times with speeds measured in
+meters per second to evaluate how data transformation and variable
+scaling affect the resulting factor structure, interpretation, and
+identification of unusual countries.
+
+------------------------------------------------------------------------
+
+### Data Preparation
+
+The dataset contains national women’s track records for seven events:
+100m, 200m, 400m, 800m, 1500m, 3000m, and the marathon. Because the
+original dataset reports shorter events in seconds and longer events in
+minutes, the race times were first converted to consistent time units
+where needed.
+
+A second version of the dataset was then created by converting each race
+time to average speed in meters per second. This allows the effect of
+measurement scale on the multivariate structure to be evaluated
+directly.
+
+``` r
+country <- dat19[, 1]
+
+track_time <- as.data.frame(dat19[, 2:8])
+names(track_time) <- c("100m", "200m", "400m", "800m", "1500m", "3000m", "Marathon")
+
+track_time_sec <- track_time
+track_time_sec[, c("800m", "1500m", "3000m", "Marathon")] <-
+  60 * track_time_sec[, c("800m", "1500m", "3000m", "Marathon")]
+
+dist_m <- c(100, 200, 400, 800, 1500, 3000, 42195)
+
+track_speed <- as.data.frame(sweep(track_time_sec, 2, dist_m, FUN = "/"))
+names(track_speed) <- c("100m/s", "200m/s", "400m/s", "800m/s",
+                        "1500m/s", "3000m/s", "Mar/s")
+
+pcfa_fit <- function(X, use_cov = FALSE) {
+  M <- if (use_cov) cov(X) else cor(X)
+
+  fit <- psych::principal(M, nfactors = 2, rotate = "varimax",
+                          covar = use_cov, n.obs = nrow(X))
+
+  L <- unclass(fit$loadings)
+  psi <- diag(pmax(diag(M) - rowSums(L^2), 0))
+  Sigma_hat <- L %*% t(L) + psi
+
+  score_data <- if (use_cov) {
+    scale(X, center = TRUE, scale = FALSE)
+  } else {
+    scale(X, center = TRUE, scale = TRUE)
+  }
+
+  B_reg <- solve(Sigma_hat, L)
+  scores <- score_data %*% B_reg
+
+  list(
+    fit = fit,
+    loadings = L,
+    scores = scores,
+    matrix = M
+  )
+}
+
+make_loading_table <- function(obj) {
+  out <- data.frame(
+    Variable = rownames(obj$loadings),
+    Factor1 = obj$loadings[, 1],
+    Factor2 = obj$loadings[, 2],
+    Communality = rowSums(obj$loadings^2)
+  )
+  out[, -1] <- round(out[, -1], 3)
+  out
+}
+
+make_var_table <- function(obj) {
+  ss <- colSums(obj$loadings^2)
+  total <- sum(diag(obj$matrix))
+
+  out <- data.frame(
+    Factor = c("Factor1", "Factor2", "Total"),
+    SS_Loading = c(ss, sum(ss)),
+    Proportion = c(ss / total, sum(ss) / total)
+  )
+  out[, -1] <- round(out[, -1], 3)
+  out
+}
+
+top_outliers <- function(score_mat, k = 3) {
+  d <- sqrt(rowSums(score_mat[, 1:2]^2))
+  order(d, decreasing = TRUE)[1:k]
+}
+
+time_cov <- pcfa_fit(track_time, use_cov = TRUE)
+time_cor <- pcfa_fit(track_time, use_cov = FALSE)
+
+speed_cov <- pcfa_fit(track_speed, use_cov = TRUE)
+speed_cor <- pcfa_fit(track_speed, use_cov = FALSE)
+
+time_cov_tab <- make_loading_table(time_cov)
+time_cor_tab <- make_loading_table(time_cor)
+speed_cov_tab <- make_loading_table(speed_cov)
+speed_cor_tab <- make_loading_table(speed_cor)
+
+time_cov_var <- make_var_table(time_cov)
+time_cor_var <- make_var_table(time_cor)
+speed_cov_var <- make_var_table(speed_cov)
+speed_cor_var <- make_var_table(speed_cor)
+
+out_time_cov <- top_outliers(time_cov$scores)
+out_time_cor <- top_outliers(time_cor$scores)
+out_speed_cov <- top_outliers(speed_cov$scores)
+out_speed_cor <- top_outliers(speed_cor$scores)
+```
+
+Factor Structure of the Original Race-Time Data
+
+The original race-time data were first analyzed using both the
+covariance and correlation matrices. Comparing these two approaches
+helps determine how differences in variable scale and variance affect
+the resulting factor structure.
+
+For each approach, a two-factor solution was estimated using Varimax
+rotation. Factor loadings, explained variation, factor scores, and
+potentially unusual country profiles were then examined.
+
+``` r
+time_cov_var
+```
+
+    ##      Factor SS_Loading Proportion
+    ## RC1 Factor1    243.005      0.872
+    ## RC2 Factor2     35.375      0.127
+    ##       Total    278.379      0.999
+
+``` r
+time_cov_tab
+```
+
+    ##          Variable Factor1 Factor2 Communality
+    ## 100m         100m   0.173   0.307       0.124
+    ## 200m         200m   0.404   0.765       0.749
+    ## 400m         400m   1.038   2.376       6.725
+    ## 800m         800m   0.061   0.051       0.006
+    ## 1500m       1500m   0.179   0.142       0.052
+    ## 3000m       3000m   0.561   0.371       0.453
+    ## Marathon Marathon  15.537   5.375     270.270
+
+``` r
+country[out_time_cov]
+```
+
+    ## [[1]]
+    ## [1] "PNG"
+    ## 
+    ## [[2]]
+    ## [1] "COK"
+    ## 
+    ## [[3]]
+    ## [1] "KOR, N"
+
+``` r
+time_cor_var
+```
+
+    ##      Factor SS_Loading Proportion
+    ## RC1 Factor1      3.309      0.473
+    ## RC2 Factor2      3.128      0.447
+    ##       Total      6.436      0.919
+
+``` r
+time_cor_tab
+```
+
+    ##          Variable Factor1 Factor2 Communality
+    ## 100m         100m   0.431   0.865       0.933
+    ## 200m         200m   0.437   0.877       0.960
+    ## 400m         400m   0.385   0.878       0.919
+    ## 800m         800m   0.773   0.569       0.921
+    ## 1500m       1500m   0.845   0.475       0.940
+    ## 3000m       3000m   0.885   0.388       0.934
+    ## Marathon Marathon   0.830   0.373       0.828
+
+``` r
+country[out_time_cor]
+```
+
+    ## [[1]]
+    ## [1] "SAM"
+    ## 
+    ## [[2]]
+    ## [1] "COK"
+    ## 
+    ## [[3]]
+    ## [1] "KOR, N"
+
+\### Effect of Variable Scaling
+
+The covariance-based analysis of the original race-time data is
+difficult to interpret because the seven events operate on substantially
+different numerical scales. In particular, marathon times have much
+larger variability than the shorter events, causing the marathon
+variable to exert disproportionate influence on the covariance-based
+solution.
+
+The correlation-based analysis addresses this issue by standardizing the
+variables before estimating the factor structure. This places each event
+on a comparable scale and prevents events with larger numerical variance
+from dominating the analysis.
+
+For the original race-time data, the correlation-based solution
+therefore provides the more informative representation.
+
+Interpreting the Performance Dimensions:
+
+### The rotated correlation-based solution reveals two broad dimensions of athletic performance
+
+- **Sprint performance:** associated most strongly with the shorter
+  events, particularly the 100 m, 200 m, and 400 m.
+- **Endurance performance:** associated more strongly with the 800 m,
+  1500 m, 3000 m, and marathon.
+
+This structure suggests that national performance across seven
+individual events can be summarized using broader dimensions
+corresponding approximately to short-distance speed and longer-distance
+endurance.
+
+### Factor Scores and Unusual Country Profiles
+
+Factor scores were calculated to represent each country’s position along
+the two estimated performance dimensions. Plotting these scores provides
+a visual way to examine similarities among countries and identify
+observations that lie unusually far from the main concentration of the
+data.
+
+``` r
+par(mfrow = c(1, 2))
+
+plot(time_cov$scores[, 1], time_cov$scores[, 2],
+     xlab = "Factor 1", ylab = "Factor 2",
+     main = "Race Times: Covariance-Based Scores")
+text(time_cov$scores[out_time_cov, 1], time_cov$scores[out_time_cov, 2],
+     labels = country[out_time_cov], pos = 4, cex = 0.8)
+
+plot(time_cor$scores[, 1], time_cor$scores[, 2],
+     xlab = "Factor 1", ylab = "Factor 2",
+     main = "Race Times: Correlation-Based Scores")
+text(time_cor$scores[out_time_cor, 1], time_cor$scores[out_time_cor, 2],
+     labels = country[out_time_cor], pos = 4, cex = 0.8)
+```
+
+![](multivariate_analysis_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+``` r
+par(mfrow = c(1, 1))
+```
+
+The correlation-based score plot identifies SAM, COK, KOR, N as the
+observations positioned farthest from the main concentration of
+countries in the two-factor space. These countries therefore have
+relatively unusual performance profiles across the seven events.
+
+The covariance-based score plot is less informative because differences
+in the scale and variance of the original race-time variables heavily
+influence the factor solution. Overall, the correlation-based analysis
+provides a clearer representation of the structure in the original time
+data.
+
+### Transforming Race Times to Speed
+
+The analysis was repeated after converting each national record from
+elapsed time to average speed in meters per second. Expressing every
+event using the same type of measurement provides a useful comparison
+with the original race-time analysis and reduces the effect of
+differences in measurement scale.
+
+Both covariance- and correlation-based two-factor solutions were
+estimated using the transformed speed data, allowing the stability of
+the underlying performance structure to be evaluated.
+
+``` r
+speed_cov_tab_out <- speed_cov_tab
+speed_cov_tab_out[, -1] <- round(speed_cov_tab_out[, -1], 5)
+
+speed_cor_tab_out <- speed_cor_tab
+speed_cor_tab_out[, -1] <- round(speed_cor_tab_out[, -1], 3)
+
+speed_cov_var
+```
+
+    ##      Factor SS_Loading Proportion
+    ## RC1 Factor1      0.001      0.519
+    ## RC2 Factor2      0.000      0.440
+    ##       Total      0.001      0.958
+
+``` r
+speed_cov_tab_out
+```
+
+    ##         Variable Factor1 Factor2 Communality
+    ## 100m/s    100m/s   0.002   0.003       0.000
+    ## 200m/s    200m/s   0.002   0.003       0.000
+    ## 400m/s    400m/s   0.003   0.004       0.000
+    ## 800m/s    800m/s   0.004   0.005       0.000
+    ## 1500m/s  1500m/s   0.005   0.010       0.000
+    ## 3000m/s  3000m/s   0.007   0.014       0.000
+    ## Mar/s      Mar/s   0.021   0.010       0.001
+
+``` r
+country[out_speed_cov]
+```
+
+    ## [[1]]
+    ## [1] "SAM"
+    ## 
+    ## [[2]]
+    ## [1] "PNG"
+    ## 
+    ## [[3]]
+    ## [1] "COK"
+
+``` r
+speed_cor_var
+```
+
+    ##      Factor SS_Loading Proportion
+    ## RC1 Factor1      3.309      0.473
+    ## RC2 Factor2      3.128      0.447
+    ##       Total      6.436      0.919
+
+``` r
+speed_cor_tab_out
+```
+
+    ##         Variable Factor1 Factor2 Communality
+    ## 100m/s    100m/s   0.431   0.865       0.933
+    ## 200m/s    200m/s   0.437   0.877       0.960
+    ## 400m/s    400m/s   0.385   0.878       0.919
+    ## 800m/s    800m/s   0.773   0.569       0.921
+    ## 1500m/s  1500m/s   0.845   0.475       0.940
+    ## 3000m/s  3000m/s   0.885   0.388       0.934
+    ## Mar/s      Mar/s   0.830   0.373       0.828
+
+``` r
+country[out_speed_cor]
+```
+
+    ## [[1]]
+    ## [1] "SAM"
+    ## 
+    ## [[2]]
+    ## [1] "COK"
+    ## 
+    ## [[3]]
+    ## [1] "KOR, N"
+
+### Factor Structure After Converting to Speed
+
+After transforming the race records to meters per second, the
+covariance- and correlation-based analyses produce substantially more
+similar factor structures. Because all seven variables are now expressed
+using the same type of measurement, the covariance matrix is less
+affected by differences in scale than it was for the original race-time
+data.
+
+Both solutions again reveal two broad dimensions of athletic
+performance: one associated primarily with shorter-distance events and
+another associated more strongly with longer-distance events.
+
+The covariance-based factor loadings are numerically smaller because the
+speed variables themselves exhibit relatively small variances on the
+meters-per-second scale. Despite these numerical differences, the
+substantive interpretation of the two-factor structure is similar across
+the covariance- and correlation-based analyses.
+
+### Comparing the Time- and Speed-Based Analyses
+
+The transformation from race times to speeds substantially reduces the
+difference between the covariance- and correlation-based solutions. With
+the original time measurements, differences in scale cause the
+covariance analysis to be dominated by events with greater numerical
+variability. After conversion to speed, all events are expressed on a
+common measurement scale, producing a more balanced covariance
+structure.
+
+The speed-based analysis therefore provides the clearer overall
+representation of the data. It preserves the distinction between short-
+and long-distance performance while reducing the sensitivity of the
+results to the choice between covariance and correlation matrices.
+
+### Factor Scores After the Speed Transformation
+
+Factor scores from the speed-based models were plotted to evaluate
+whether the transformation also changes the relative positions of
+countries in the estimated factor space and to identify countries with
+unusually strong or weak combinations of sprint and endurance
+performance.
+
+``` r
+par(mfrow = c(1, 2))
+
+plot(speed_cov$scores[, 1], speed_cov$scores[, 2],
+     xlab = "Factor 1", ylab = "Factor 2",
+     main = "Race Speeds: Covariance-Based Scores")
+text(speed_cov$scores[out_speed_cov, 1], speed_cov$scores[out_speed_cov, 2],
+     labels = country[out_speed_cov], pos = 4, cex = 0.8)
+
+plot(speed_cor$scores[, 1], speed_cor$scores[, 2],
+     xlab = "Factor 1", ylab = "Factor 2",
+     main = "Race Speeds: Correlation-Based Scores")
+text(speed_cor$scores[out_speed_cor, 1], speed_cor$scores[out_speed_cor, 2],
+     labels = country[out_speed_cor], pos = 4, cex = 0.8)
+```
+
+![](multivariate_analysis_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+``` r
+par(mfrow = c(1, 1))
+```
+
+Key Findings
+
+- Performance across seven running events can be summarized using two
+  broad dimensions corresponding approximately to **sprint performance**
+  and **endurance performance**.
+- The covariance-based analysis of the original race times is sensitive
+  to differences in variable scale, with longer events exerting
+  disproportionate influence on the resulting factor structure.
+- Standardizing the variables through the correlation matrix produces a
+  more interpretable structure when the original race-time measurements
+  are used.
+- Converting race times to speeds places all events on a common
+  measurement scale and produces greater agreement between the
+  covariance- and correlation-based analyses.
+- The results demonstrate that data representation and scaling can
+  materially affect the conclusions of multivariate statistical models.
